@@ -106,7 +106,7 @@ def batch_request(
 
     Note: Microsoft Graph batch API limits:
     - Max 20 requests per batch
-    - Max 4 concurrent requests per mailbox (handled automatically)
+    - Max 4 concurrent requests per mailbox (handled by chunking into groups of 4)
     """
     if not requests:
         return {"responses": []}
@@ -114,16 +114,36 @@ def batch_request(
     if len(requests) > 20:
         raise ValueError("Batch requests cannot exceed 20 items")
 
-    # For email operations, use fully sequential processing to respect mailbox limits
+    # Process in chunks of 4 to respect mailbox concurrency limits (4 concurrent per mailbox)
+    # Each chunk runs in parallel, but chunks run sequentially
     # Microsoft Graph requires batch to be either fully sequential or fully parallel
     chunked_requests = []
-    for i, req in enumerate(requests):
-        # Add dependsOn for sequential processing (except first request)
-        if i > 0 and "dependsOn" not in req:
-            prev_req_id = requests[i - 1]["id"]
+    
+    # If 4 or fewer requests, run them all in parallel (no dependsOn)
+    if len(requests) <= 4:
+        chunked_requests = requests
+    else:
+        # For more than 4 requests, create sequential chunks of 4
+        for i, req in enumerate(requests):
             req = req.copy()
-            req["dependsOn"] = [prev_req_id]
-        chunked_requests.append(req)
+            
+            # First request of each chunk (positions 0, 4, 8, 12, etc.) has no dependencies
+            if i % 4 == 0:
+                # First request in chunk - no dependsOn
+                pass
+            else:
+                # Other requests in chunk depend on previous request in same chunk
+                prev_req_id = requests[i - 1]["id"]
+                req["dependsOn"] = [prev_req_id]
+            
+            # If this is the start of a new chunk (and not the first chunk)
+            # make it depend on the last request of the previous chunk
+            if i >= 4 and i % 4 == 0:
+                # This request starts a new chunk, make it depend on the last request of previous chunk
+                prev_chunk_last_id = requests[i - 1]["id"]
+                req["dependsOn"] = [prev_chunk_last_id]
+            
+            chunked_requests.append(req)
 
     batch_payload = {"requests": chunked_requests}
 
