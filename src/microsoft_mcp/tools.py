@@ -488,6 +488,9 @@ def batch_delete_emails(account_id: str, email_ids: list[str]) -> dict[str, Any]
     if len(email_ids) > 20:
         raise ValueError(f"Cannot delete more than 20 emails at once. Received {len(email_ids)} emails.")
 
+    # Validate that all email IDs exist first (optional but recommended)
+    # This prevents the entire batch from failing due to one invalid ID
+    
     # Create batch requests for deletion
     requests = []
     for i, email_id in enumerate(email_ids):

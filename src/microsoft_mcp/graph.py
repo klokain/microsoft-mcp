@@ -114,12 +114,12 @@ def batch_request(
     if len(requests) > 20:
         raise ValueError("Batch requests cannot exceed 20 items")
 
-    # Split into chunks of 4 to respect mailbox concurrency limits
-    # Use dependsOn to ensure sequential processing within chunks
+    # For email operations, use fully sequential processing to respect mailbox limits
+    # Microsoft Graph requires batch to be either fully sequential or fully parallel
     chunked_requests = []
     for i, req in enumerate(requests):
-        # Add dependsOn for sequential processing (except first request in each chunk of 4)
-        if i % 4 != 0 and "dependsOn" not in req:
+        # Add dependsOn for sequential processing (except first request)
+        if i > 0 and "dependsOn" not in req:
             prev_req_id = requests[i - 1]["id"]
             req = req.copy()
             req["dependsOn"] = [prev_req_id]
@@ -154,6 +154,7 @@ def batch_request(
                 time.sleep(wait_time)
                 retry_count += 1
                 continue
+
 
             response.raise_for_status()
             return response.json()
