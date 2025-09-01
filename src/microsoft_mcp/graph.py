@@ -130,6 +130,7 @@ def batch_request(
     headers = {
         "Authorization": f"Bearer {get_token(account_id)}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
     retry_count = 0

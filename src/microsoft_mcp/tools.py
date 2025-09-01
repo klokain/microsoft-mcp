@@ -484,6 +484,9 @@ def batch_delete_emails(account_id: str, email_ids: list[str]) -> dict[str, Any]
     """
     if not email_ids:
         return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+    
+    if len(email_ids) > 20:
+        raise ValueError(f"Cannot delete more than 20 emails at once. Received {len(email_ids)} emails.")
 
     # Create batch requests for deletion
     requests = []
@@ -546,6 +549,9 @@ def batch_move_emails(
     """
     if not email_ids:
         return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+    
+    if len(email_ids) > 20:
+        raise ValueError(f"Cannot move more than 20 emails at once. Received {len(email_ids)} emails.")
 
     # Find the destination folder ID
     folder_path = FOLDERS.get(destination_folder.casefold(), destination_folder)
@@ -572,6 +578,7 @@ def batch_move_emails(
                 "method": "POST",
                 "url": f"/me/messages/{email_id}/move",
                 "body": {"destinationId": folder_id},
+                "headers": {"Content-Type": "application/json"},
             }
         )
 
@@ -641,6 +648,9 @@ def batch_update_emails(
     """
     if not email_ids:
         return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+    
+    if len(email_ids) > 20:
+        raise ValueError(f"Cannot update more than 20 emails at once. Received {len(email_ids)} emails.")
 
     if not updates:
         raise ValueError("Updates dictionary cannot be empty")
@@ -654,6 +664,7 @@ def batch_update_emails(
                 "method": "PATCH",
                 "url": f"/me/messages/{email_id}",
                 "body": updates,
+                "headers": {"Content-Type": "application/json"},
             }
         )
 
