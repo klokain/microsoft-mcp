@@ -435,3 +435,77 @@ def search_query(
             break
 
         payload["requests"][0]["from"] += payload["requests"][0]["size"]
+
+
+class MailRuleError(Exception):
+    """Custom exception for mail rule operations"""
+    pass
+
+
+def get_mail_folder_id(folder_name: str, account_id: str | None = None) -> str:
+    """Get folder ID by name or return if already an ID"""
+    if folder_name.startswith("AAMkA"):  # Already an ID
+        return folder_name
+    
+    # Try well-known folders first
+    well_known = ["inbox", "drafts", "sentitems", "deleteditems", "archive", "junkemail"]
+    if folder_name.lower() in well_known:
+        return folder_name
+    
+    # Search for folder by display name
+    folders = request_paginated("/me/mailFolders", account_id)
+    for folder in folders:
+        if folder["displayName"].lower() == folder_name.lower():
+            return folder["id"]
+    
+    raise ValueError(f"Folder '{folder_name}' not found")
+
+
+def validate_rule_conditions(conditions: dict[str, Any]) -> dict[str, Any]:
+    """Validate and format rule conditions"""
+    # Based on Microsoft Graph API documentation
+    valid_conditions = {
+        "senderContains", "recipientContains", "subjectContains", "bodyContains",
+        "subjectOrBodyContains", "fromAddresses", "sentToAddresses", 
+        "hasAttachments", "importance", "isApprovalRequest", "isAutomaticForward", 
+        "isAutomaticReply", "isEncrypted", "isMeetingRequest", "isMeetingResponse", 
+        "isNonDeliveryReport", "isPermissionControlled", "isReadReceipt", 
+        "isSigned", "isVoicemail", "messageActionFlag", "notSentToMe", 
+        "sensitivity", "sentCcMe", "sentOnlyToMe", "sentToMe", "sentToOrCcMe", 
+        "withinSizeRange", "categories", "receivedDateTimeRange"
+    }
+    
+    validated = {}
+    for key, value in conditions.items():
+        if key in valid_conditions:
+            validated[key] = value
+    
+    return validated
+
+
+def validate_rule_actions(actions: dict[str, Any], account_id: str | None = None) -> dict[str, Any]:
+    """Validate and format rule actions"""
+    valid_actions = {
+        "assignCategories", "copyToFolder", "delete", "forwardAsAttachmentTo",
+        "forwardTo", "markAsRead", "markImportance", "moveToFolder", 
+        "permanentDelete", "redirectTo", "stopProcessingRules"
+    }
+    
+    validated = {}
+    for key, value in actions.items():
+        if key not in valid_actions:
+            continue
+            
+        # Convert folder names to IDs for folder actions
+        if key in ["moveToFolder", "copyToFolder"] and value:
+            validated[key] = get_mail_folder_id(value, account_id)
+        # Ensure email addresses are in correct format for forward/redirect
+        elif key in ["forwardTo", "forwardAsAttachmentTo", "redirectTo"]:
+            if isinstance(value, str):
+                validated[key] = [{"emailAddress": {"address": value}}]
+            elif isinstance(value, list):
+                validated[key] = [{"emailAddress": {"address": email}} for email in value]
+        else:
+            validated[key] = value
+    
+    return validated

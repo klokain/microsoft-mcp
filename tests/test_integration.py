@@ -1294,3 +1294,152 @@ async def test_batch_update_emails():
                     "email_ids": test_emails,
                 },
             )
+
+
+@pytest.mark.asyncio
+async def test_mail_rules_crud():
+    """Test creating, reading, updating, and deleting mail rules"""
+    async for session in get_session():
+        account_info = await get_account_info(session)
+        
+        # Create a test rule
+        rule_result = await session.call_tool(
+            "create_mail_rule",
+            {
+                "account_id": account_info["account_id"],
+                "display_name": "Test Newsletter Rule",
+                "conditions": {
+                    "senderContains": ["newsletter", "noreply"],
+                    "subjectContains": ["unsubscribe"]
+                },
+                "actions": {
+                    "markAsRead": True
+                },
+                "is_enabled": False  # Don't enable during testing
+            }
+        )
+        assert not rule_result.isError
+        rule_data = parse_result(rule_result)
+        
+        assert rule_data["displayName"] == "Test Newsletter Rule"
+        assert not rule_data["isEnabled"]
+        rule_id = rule_data["id"]
+        
+        try:
+            # List rules
+            list_result = await session.call_tool(
+                "list_mail_rules",
+                {"account_id": account_info["account_id"]}
+            )
+            assert not list_result.isError
+            rules = parse_result(list_result)
+            assert any(r["id"] == rule_id for r in rules)
+            
+            # Get specific rule
+            get_result = await session.call_tool(
+                "get_mail_rule",
+                {
+                    "account_id": account_info["account_id"],
+                    "rule_id": rule_id
+                }
+            )
+            assert not get_result.isError
+            fetched_rule = parse_result(get_result)
+            assert fetched_rule["id"] == rule_id
+            assert "NEWSLETTER" in fetched_rule["conditions"]["senderContains"]
+            
+            # Update rule
+            update_result = await session.call_tool(
+                "update_mail_rule",
+                {
+                    "account_id": account_info["account_id"],
+                    "rule_id": rule_id,
+                    "display_name": "Updated Test Rule",
+                    "is_enabled": True
+                }
+            )
+            assert not update_result.isError
+            updated = parse_result(update_result)
+            assert updated["displayName"] == "Updated Test Rule"
+            assert updated["isEnabled"]
+            
+            # Toggle rule
+            toggle_result = await session.call_tool(
+                "toggle_mail_rule",
+                {
+                    "account_id": account_info["account_id"],
+                    "rule_id": rule_id,
+                    "enabled": False
+                }
+            )
+            assert not toggle_result.isError
+            toggled = parse_result(toggle_result)
+            assert not toggled["is_enabled"]
+            
+        finally:
+            # Clean up - delete the rule
+            delete_result = await session.call_tool(
+                "delete_mail_rule",
+                {
+                    "account_id": account_info["account_id"],
+                    "rule_id": rule_id
+                }
+            )
+            assert not delete_result.isError
+            
+            # Verify deletion by listing rules
+            list_result = await session.call_tool(
+                "list_mail_rules",
+                {"account_id": account_info["account_id"]}
+            )
+            assert not list_result.isError
+            rules = parse_result(list_result)
+            assert not any(r["id"] == rule_id for r in rules)
+
+
+@pytest.mark.asyncio
+async def test_complex_mail_rule():
+    """Test creating a complex mail rule with multiple conditions and actions"""
+    async for session in get_session():
+        account_info = await get_account_info(session)
+        
+        # Create a complex rule with multiple conditions and actions
+        rule_result = await session.call_tool(
+            "create_mail_rule",
+            {
+                "account_id": account_info["account_id"],
+                "display_name": "Complex Priority Rule",
+                "conditions": {
+                    "fromAddresses": [
+                        {"emailAddress": {"address": "boss@company.com"}},
+                        {"emailAddress": {"address": "ceo@company.com"}}
+                    ],
+                    "importance": "high",
+                    "hasAttachments": True
+                },
+                "actions": {
+                    "markImportance": "high",
+                    "assignCategories": ["Important", "Review"]
+                },
+                "sequence": 1,  # High priority
+                "is_enabled": False  # Don't enable during testing
+            }
+        )
+        assert not rule_result.isError
+        rule_data = parse_result(rule_result)
+        
+        try:
+            assert rule_data["sequence"] == 1
+            assert rule_data["actions"]["markImportance"] == "high"
+            assert "Important" in rule_data["actions"]["assignCategories"]
+            assert not rule_data["isEnabled"]  # Should be disabled during testing
+            
+        finally:
+            # Clean up
+            await session.call_tool(
+                "delete_mail_rule",
+                {
+                    "account_id": account_info["account_id"],
+                    "rule_id": rule_data["id"]
+                }
+            )

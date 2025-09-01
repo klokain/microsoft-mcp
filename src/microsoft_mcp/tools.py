@@ -1209,3 +1209,211 @@ def unified_search(
             results.setdefault("other", []).append(item)
 
     return {k: v for k, v in results.items() if v}
+
+
+# Mail Rules Management Tools
+
+@mcp.tool
+def list_mail_rules(
+    account_id: str,
+    include_disabled: bool = True
+) -> list[dict[str, Any]]:
+    """
+    List all mail rules for the user's inbox
+    
+    Args:
+        account_id: Microsoft account ID
+        include_disabled: Whether to include disabled rules (default: True)
+    
+    Returns:
+        List of mail rules with their configurations
+    """
+    rules = list(graph.request_paginated("/me/mailFolders/inbox/messageRules", account_id))
+    
+    if not include_disabled:
+        rules = [r for r in rules if r.get("isEnabled", False)]
+    
+    return rules
+
+
+@mcp.tool
+def get_mail_rule(
+    account_id: str,
+    rule_id: str
+) -> dict[str, Any]:
+    """
+    Get details of a specific mail rule
+    
+    Args:
+        account_id: Microsoft account ID
+        rule_id: The ID of the mail rule
+    
+    Returns:
+        Mail rule details including conditions and actions
+    """
+    result = graph.request("GET", f"/me/mailFolders/inbox/messageRules/{rule_id}", account_id)
+    if not result:
+        raise ValueError(f"Mail rule {rule_id} not found")
+    return result
+
+
+@mcp.tool
+def create_mail_rule(
+    account_id: str,
+    display_name: str,
+    conditions: dict[str, Any],
+    actions: dict[str, Any],
+    is_enabled: bool = True,
+    sequence: int | None = None
+) -> dict[str, Any]:
+    """
+    Create a new mail rule
+    
+    Args:
+        account_id: Microsoft account ID
+        display_name: Name for the rule
+        conditions: Rule conditions (e.g., {"senderContains": ["newsletter"], "hasAttachments": True})
+        actions: Rule actions (e.g., {"moveToFolder": "Archive", "markAsRead": True})
+        is_enabled: Whether rule is active (default: True)
+        sequence: Rule priority/order (lower numbers run first)
+    
+    Supported conditions:
+        - bodyContains, senderContains, subjectContains, recipientContains
+        - fromAddresses, sentToAddresses, categories
+        - hasAttachments, importance, sensitivity
+        - isMeetingRequest, isAutomaticForward, isVoicemail, etc.
+    
+    Supported actions:
+        - moveToFolder, copyToFolder, delete, permanentDelete
+        - markAsRead, markImportance, forwardTo, redirectTo
+        - assignCategories, stopProcessingRules
+    
+    Returns:
+        Created mail rule object
+    """
+    validated_conditions = graph.validate_rule_conditions(conditions)
+    validated_actions = graph.validate_rule_actions(actions, account_id)
+    
+    if not validated_conditions:
+        raise ValueError("At least one valid condition is required")
+    if not validated_actions:
+        raise ValueError("At least one valid action is required")
+    
+    payload = {
+        "displayName": display_name,
+        "conditions": validated_conditions,
+        "actions": validated_actions,
+        "isEnabled": is_enabled,
+        "sequence": sequence if sequence is not None else 1
+    }
+    
+    result = graph.request("POST", "/me/mailFolders/inbox/messageRules", account_id, json=payload)
+    if not result:
+        raise ValueError("Failed to create mail rule")
+    
+    return result
+
+
+@mcp.tool
+def update_mail_rule(
+    account_id: str,
+    rule_id: str,
+    display_name: str | None = None,
+    conditions: dict[str, Any] | None = None,
+    actions: dict[str, Any] | None = None,
+    is_enabled: bool | None = None,
+    sequence: int | None = None
+) -> dict[str, Any]:
+    """
+    Update an existing mail rule
+    
+    Args:
+        account_id: Microsoft account ID
+        rule_id: The ID of the mail rule to update
+        display_name: New name for the rule (optional)
+        conditions: New conditions (optional, replaces all conditions)
+        actions: New actions (optional, replaces all actions)
+        is_enabled: Enable/disable the rule (optional)
+        sequence: New priority order (optional)
+    
+    Returns:
+        Updated mail rule object
+    """
+    payload = {}
+    
+    if display_name is not None:
+        payload["displayName"] = display_name
+    
+    if conditions is not None:
+        payload["conditions"] = graph.validate_rule_conditions(conditions)
+    
+    if actions is not None:
+        payload["actions"] = graph.validate_rule_actions(actions, account_id)
+    
+    if is_enabled is not None:
+        payload["isEnabled"] = is_enabled
+    
+    if sequence is not None:
+        payload["sequence"] = sequence
+    
+    if not payload:
+        raise ValueError("No updates provided")
+    
+    result = graph.request("PATCH", f"/me/mailFolders/inbox/messageRules/{rule_id}", 
+                    account_id, json=payload)
+    if not result:
+        raise ValueError(f"Failed to update mail rule {rule_id}")
+    
+    return result
+
+
+@mcp.tool
+def delete_mail_rule(
+    account_id: str,
+    rule_id: str
+) -> dict[str, Any]:
+    """
+    Delete a mail rule
+    
+    Args:
+        account_id: Microsoft account ID
+        rule_id: The ID of the mail rule to delete
+    
+    Returns:
+        Success status
+    """
+    graph.request("DELETE", f"/me/mailFolders/inbox/messageRules/{rule_id}", account_id)
+    return {"success": True, "message": f"Mail rule {rule_id} deleted successfully"}
+
+
+@mcp.tool
+def toggle_mail_rule(
+    account_id: str,
+    rule_id: str,
+    enabled: bool | None = None
+) -> dict[str, Any]:
+    """
+    Enable or disable a mail rule
+    
+    Args:
+        account_id: Microsoft account ID
+        rule_id: The ID of the mail rule
+        enabled: True to enable, False to disable, None to toggle
+    
+    Returns:
+        Updated rule status
+    """
+    if enabled is None:
+        # Get current status and toggle
+        rule = get_mail_rule(account_id, rule_id)
+        enabled = not rule.get("isEnabled", False)
+    
+    result = graph.request("PATCH", f"/me/mailFolders/inbox/messageRules/{rule_id}", 
+                    account_id, json={"isEnabled": enabled})
+    
+    return {
+        "success": True,
+        "rule_id": rule_id,
+        "is_enabled": enabled,
+        "message": f"Rule {'enabled' if enabled else 'disabled'} successfully"
+    }

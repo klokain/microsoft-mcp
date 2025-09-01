@@ -47,6 +47,12 @@ claude
 > upload this report to OneDrive
 > search for "project proposal" across all my files
 
+# Mail rules examples
+> create a rule to move all newsletters to a folder
+> list all my active mail rules
+> disable the rule that forwards to my assistant
+> create a rule to flag emails from my boss as important
+
 # Multi-account
 > list all my Microsoft accounts
 > send email from my work account
@@ -92,6 +98,14 @@ claude
 - **`delete_contact`** - Delete contact
 - **`search_contacts`** - Search contacts by query
 
+### Mail Rule Tools
+- **`list_mail_rules`** - List all inbox rules
+- **`get_mail_rule`** - Get specific rule details
+- **`create_mail_rule`** - Create new mail rule with conditions and actions
+- **`update_mail_rule`** - Modify existing mail rules
+- **`delete_mail_rule`** - Remove mail rules
+- **`toggle_mail_rule`** - Enable/disable rules
+
 ### File Tools
 - **`list_files`** - Browse OneDrive files and folders
 - **`get_file`** - Download file content
@@ -121,6 +135,7 @@ claude
    - Contacts.Read
    - People.Read
    - User.Read
+   - MailboxSettings.ReadWrite
 6. Copy Application ID
 
 ### 2. Installation
@@ -282,6 +297,75 @@ create_event(
 )
 ```
 
+### Automated Email Organization with Rules
+```python
+# Get account ID first
+accounts = list_accounts()
+account_id = accounts[0]["account_id"]
+
+# Create rule to organize newsletters
+create_mail_rule(
+    account_id,
+    "Newsletter Management",
+    conditions={
+        "senderContains": ["newsletter", "noreply", "marketing"],
+        "subjectContains": ["unsubscribe", "weekly", "digest"]
+    },
+    actions={
+        "moveToFolder": "Newsletters",
+        "markAsRead": False,
+        "assignCategories": ["Newsletters"]
+    }
+)
+
+# Priority email handling
+create_mail_rule(
+    account_id,
+    "VIP Emails",
+    conditions={
+        "fromAddresses": [
+            {"emailAddress": {"address": "ceo@company.com"}},
+            {"emailAddress": {"address": "important.client@example.com"}}
+        ],
+        "importance": "high"
+    },
+    actions={
+        "markImportance": "high",
+        "assignCategories": ["VIP", "Urgent"],
+        "forwardTo": "assistant@company.com"
+    },
+    sequence=1  # Process first
+)
+
+# Spam filtering rule
+create_mail_rule(
+    account_id,
+    "Spam Filter",
+    conditions={
+        "bodyOrSubjectContains": ["win", "free", "click here", "limited offer"],
+        "senderContains": ["@suspicious-domain.com"]
+    },
+    actions={
+        "moveToFolder": "Junk Email",
+        "permanentDelete": False
+    }
+)
+
+# Meeting request handling
+create_mail_rule(
+    account_id,
+    "Meeting Requests",
+    conditions={
+        "isMeetingRequest": True,
+        "importance": "high"
+    },
+    actions={
+        "assignCategories": ["Meetings", "Calendar"],
+        "markImportance": "high"
+    }
+)
+```
+
 ## Security Notes
 
 - Tokens are cached locally in `~/.microsoft_mcp_token_cache.json`
@@ -294,6 +378,7 @@ create_event(
 - **Authentication fails**: Check your CLIENT_ID is correct
 - **"Need admin approval"**: Use `MICROSOFT_MCP_TENANT_ID=consumers` for personal accounts
 - **Missing permissions**: Ensure all required API permissions are granted in Azure
+- **Mail rules 403 Forbidden**: Add `MailboxSettings.ReadWrite` permission to your Azure app registration
 - **Token errors**: Delete `~/.microsoft_mcp_token_cache.json` and re-authenticate
 
 ## License
