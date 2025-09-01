@@ -1,10 +1,11 @@
 [project]
 name = "microsoft-mcp"
 version = "0.1.0"
-description = "Microsoft Graph MCP server for Outlook, Calendar, and OneDrive with multi-account support"
+description = "Microsoft Graph MCP server for Outlook, Calendar, and OneDrive with multi-account support - resulta.tech fork"
 readme = "README.md"
 authors = [
-    { name = "elyx", email = "elio@pascarelli.com" }
+    { name = "elyx", email = "elio@pascarelli.com" },
+    { name = "resulta.tech", email = "contact@resulta.tech" }
 ]
 requires-python = ">=3.12"
 dependencies = [

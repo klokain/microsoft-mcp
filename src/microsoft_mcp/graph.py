@@ -83,6 +83,91 @@ def request(
     return None
 
 
+def batch_request(
+    requests: list[dict[str, Any]],
+    account_id: str | None = None,
+    max_retries: int = 3,
+) -> dict[str, Any]:
+    """
+    Make batch requests to Microsoft Graph API
+
+    Args:
+        requests: List of individual request objects, each containing:
+            - id: Unique identifier for the request
+            - method: HTTP method (GET, POST, PATCH, DELETE)
+            - url: Relative URL path
+            - body: (optional) Request body for POST/PATCH
+            - dependsOn: (optional) List of request IDs this request depends on
+        account_id: Microsoft account ID for authentication
+        max_retries: Number of retry attempts for failed requests
+
+    Returns:
+        Dictionary containing 'responses' array with results for each request
+
+    Note: Microsoft Graph batch API limits:
+    - Max 20 requests per batch
+    - Max 4 concurrent requests per mailbox (handled automatically)
+    """
+    if not requests:
+        return {"responses": []}
+
+    if len(requests) > 20:
+        raise ValueError("Batch requests cannot exceed 20 items")
+
+    # Split into chunks of 4 to respect mailbox concurrency limits
+    # Use dependsOn to ensure sequential processing within chunks
+    chunked_requests = []
+    for i, req in enumerate(requests):
+        # Add dependsOn for sequential processing (except first request in each chunk of 4)
+        if i % 4 != 0 and "dependsOn" not in req:
+            prev_req_id = requests[i - 1]["id"]
+            req = req.copy()
+            req["dependsOn"] = [prev_req_id]
+        chunked_requests.append(req)
+
+    batch_payload = {"requests": chunked_requests}
+
+    headers = {
+        "Authorization": f"Bearer {get_token(account_id)}",
+        "Content-Type": "application/json",
+    }
+
+    retry_count = 0
+    while retry_count <= max_retries:
+        try:
+            response = _client.post(
+                f"{BASE_URL}/$batch",
+                headers=headers,
+                json=batch_payload,
+            )
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", "5"))
+                if retry_count < max_retries:
+                    time.sleep(min(retry_after, 60))
+                    retry_count += 1
+                    continue
+
+            if response.status_code >= 500 and retry_count < max_retries:
+                wait_time = (2**retry_count) * 1
+                time.sleep(wait_time)
+                retry_count += 1
+                continue
+
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            if retry_count < max_retries and e.response.status_code >= 500:
+                wait_time = (2**retry_count) * 1
+                time.sleep(wait_time)
+                retry_count += 1
+                continue
+            raise
+
+    raise ValueError("Batch request failed after all retries")
+
+
 def request_paginated(
     path: str,
     account_id: str | None = None,

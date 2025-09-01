@@ -1,10 +1,13 @@
-# Microsoft MCP
+# Microsoft MCP (resulta.tech fork)
 
 Powerful MCP server for Microsoft Graph API - a complete AI assistant toolkit for Outlook, Calendar, OneDrive, and Contacts.
+
+*This is a fork maintained by resulta.tech based on the original work by elyxlz.*
 
 ## Features
 
 - **Email Management**: Read, send, reply, manage attachments, organize folders
+- **Batch Operations**: Efficiently delete, move, or update multiple emails at once (up to 80% fewer API calls)
 - **Calendar Intelligence**: Create, update, check availability, respond to invitations
 - **OneDrive Files**: Upload, download, browse with pagination
 - **Contacts**: Search and list contacts from your address book
@@ -15,7 +18,7 @@ Powerful MCP server for Microsoft Graph API - a complete AI assistant toolkit fo
 
 ```bash
 # Add Microsoft MCP server (replace with your Azure app ID)
-claude mcp add microsoft-mcp -e MICROSOFT_MCP_CLIENT_ID=your-app-id-here -- uvx --from git+https://github.com/elyxlz/microsoft-mcp.git microsoft-mcp
+claude mcp add microsoft-mcp -e MICROSOFT_MCP_CLIENT_ID=your-app-id-here -- uvx --from git+https://github.com/klokain/microsoft-mcp.git microsoft-mcp
 
 # Start Claude Desktop
 claude
@@ -28,6 +31,11 @@ claude
 > read my latest emails with full content
 > reply to the email from John saying "I'll review this today"
 > send an email with attachment to alice@example.com
+
+# Batch email operations
+> delete all emails from this sender at once
+> move all emails with subject containing "newsletter" to my archive folder
+> mark all unread emails from last week as read
 
 # Calendar examples  
 > show my calendar for next week
@@ -58,6 +66,13 @@ claude
 - **`delete_email`** - Delete emails
 - **`get_attachment`** - Get email attachment content
 - **`search_emails`** - Search emails by query
+
+### Batch Email Operations
+- **`batch_delete_emails`** - Delete multiple emails at once (up to 20)
+- **`batch_move_emails`** - Move multiple emails to a folder efficiently  
+- **`batch_update_emails`** - Update multiple emails (mark read/unread, etc.)
+
+*Batch operations use Microsoft Graph JSON batching for optimal performance, automatically handling concurrency limits and providing detailed results for each operation.*
 
 ### Calendar Tools
 - **`list_events`** - List calendar events with details
@@ -111,7 +126,7 @@ claude
 ### 2. Installation
 
 ```bash
-git clone https://github.com/elyxlz/microsoft-mcp.git
+git clone https://github.com/klokain/microsoft-mcp.git
 cd microsoft-mcp
 uv sync
 ```
@@ -140,7 +155,7 @@ Add to your Claude Desktop configuration:
   "mcpServers": {
     "microsoft": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/elyxlz/microsoft-mcp.git", "microsoft-mcp"],
+      "args": ["--from", "git+https://github.com/klokain/microsoft-mcp.git", "microsoft-mcp"],
       "env": {
         "MICROSOFT_MCP_CLIENT_ID": "your-app-id-here"
       }
@@ -214,6 +229,36 @@ reply_to_email(account_id, email_id, "Thanks for your message. I'll review and g
 email = get_email(email_id, account_id)
 attachments = [get_attachment(email_id, att["id"], account_id) for att in email["attachments"]]
 send_email(account_id, "boss@company.com", f"FW: {email['subject']}", email["body"]["content"], attachments=attachments)
+```
+
+### Bulk Email Operations
+```python
+# Get account ID first
+accounts = list_accounts()
+account_id = accounts[0]["account_id"]
+
+# Find emails to process
+search_results = search_emails(account_id, query="from:newsletter@company.com", limit=50)
+email_ids = [email["id"] for email in search_results]
+
+# Batch delete unwanted emails
+delete_result = batch_delete_emails(account_id, email_ids)
+print(f"Deleted {delete_result['succeeded']} of {delete_result['total']} emails")
+
+# Batch move emails to archive folder
+archive_ids = [email["id"] for email in search_emails(account_id, query="older:30d", limit=20)]
+move_result = batch_move_emails(account_id, archive_ids, "archive")
+print(f"Moved {move_result['succeeded']} emails to archive")
+
+# Batch mark emails as read
+unread_ids = [email["id"] for email in list_emails(account_id, limit=10) if not email.get("isRead")]
+update_result = batch_update_emails(account_id, unread_ids, {"isRead": True})
+print(f"Marked {update_result['succeeded']} emails as read")
+
+# Check detailed results for any failures
+for result in update_result["results"]:
+    if not result["success"]:
+        print(f"Failed to update email {result['email_id']}: {result['error']}")
 ```
 
 ### Intelligent Scheduling

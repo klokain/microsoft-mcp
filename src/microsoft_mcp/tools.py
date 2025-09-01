@@ -472,6 +472,231 @@ def reply_all_email(account_id: str, email_id: str, body: str) -> dict[str, str]
 
 
 @mcp.tool
+def batch_delete_emails(account_id: str, email_ids: list[str]) -> dict[str, Any]:
+    """Delete multiple emails at once using batch operations
+
+    Args:
+        account_id: Microsoft account ID
+        email_ids: List of email IDs to delete
+
+    Returns:
+        Dictionary with operation results and statistics
+    """
+    if not email_ids:
+        return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+
+    # Create batch requests for deletion
+    requests = []
+    for i, email_id in enumerate(email_ids):
+        requests.append(
+            {"id": str(i + 1), "method": "DELETE", "url": f"/me/messages/{email_id}"}
+        )
+
+    # Execute batch request
+    batch_response = graph.batch_request(requests, account_id)
+
+    # Process results
+    results = []
+    succeeded = 0
+    failed = 0
+
+    for response in batch_response.get("responses", []):
+        request_id = int(response["id"])
+        email_id = email_ids[request_id - 1]
+
+        if response["status"] >= 200 and response["status"] < 300:
+            results.append({"email_id": email_id, "status": "deleted", "success": True})
+            succeeded += 1
+        else:
+            error_msg = "Unknown error"
+            if "body" in response and "error" in response["body"]:
+                error_msg = response["body"]["error"].get("message", error_msg)
+
+            results.append(
+                {
+                    "email_id": email_id,
+                    "status": "failed",
+                    "success": False,
+                    "error": error_msg,
+                }
+            )
+            failed += 1
+
+    return {
+        "total": len(email_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+
+@mcp.tool
+def batch_move_emails(
+    account_id: str, email_ids: list[str], destination_folder: str
+) -> dict[str, Any]:
+    """Move multiple emails to a folder using batch operations
+
+    Args:
+        account_id: Microsoft account ID
+        email_ids: List of email IDs to move
+        destination_folder: Target folder name or path
+
+    Returns:
+        Dictionary with operation results and statistics
+    """
+    if not email_ids:
+        return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+
+    # Find the destination folder ID
+    folder_path = FOLDERS.get(destination_folder.casefold(), destination_folder)
+    folders = graph.request("GET", "/me/mailFolders", account_id)
+
+    if not folders or "value" not in folders:
+        raise ValueError("Failed to retrieve mail folders")
+
+    folder_id = None
+    for folder in folders["value"]:
+        if folder["displayName"].lower() == folder_path.lower():
+            folder_id = folder["id"]
+            break
+
+    if not folder_id:
+        raise ValueError(f"Folder '{destination_folder}' not found")
+
+    # Create batch requests for moving emails
+    requests = []
+    for i, email_id in enumerate(email_ids):
+        requests.append(
+            {
+                "id": str(i + 1),
+                "method": "POST",
+                "url": f"/me/messages/{email_id}/move",
+                "body": {"destinationId": folder_id},
+            }
+        )
+
+    # Execute batch request
+    batch_response = graph.batch_request(requests, account_id)
+
+    # Process results
+    results = []
+    succeeded = 0
+    failed = 0
+
+    for response in batch_response.get("responses", []):
+        request_id = int(response["id"])
+        email_id = email_ids[request_id - 1]
+
+        if response["status"] >= 200 and response["status"] < 300:
+            new_id = None
+            if "body" in response and "id" in response["body"]:
+                new_id = response["body"]["id"]
+
+            results.append(
+                {
+                    "email_id": email_id,
+                    "new_id": new_id,
+                    "status": "moved",
+                    "success": True,
+                }
+            )
+            succeeded += 1
+        else:
+            error_msg = "Unknown error"
+            if "body" in response and "error" in response["body"]:
+                error_msg = response["body"]["error"].get("message", error_msg)
+
+            results.append(
+                {
+                    "email_id": email_id,
+                    "status": "failed",
+                    "success": False,
+                    "error": error_msg,
+                }
+            )
+            failed += 1
+
+    return {
+        "total": len(email_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "destination_folder": destination_folder,
+        "results": results,
+    }
+
+
+@mcp.tool
+def batch_update_emails(
+    account_id: str, email_ids: list[str], updates: dict[str, Any]
+) -> dict[str, Any]:
+    """Update multiple emails at once using batch operations
+
+    Args:
+        account_id: Microsoft account ID
+        email_ids: List of email IDs to update
+        updates: Dictionary of properties to update (e.g., {"isRead": True})
+
+    Returns:
+        Dictionary with operation results and statistics
+    """
+    if not email_ids:
+        return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
+
+    if not updates:
+        raise ValueError("Updates dictionary cannot be empty")
+
+    # Create batch requests for updating emails
+    requests = []
+    for i, email_id in enumerate(email_ids):
+        requests.append(
+            {
+                "id": str(i + 1),
+                "method": "PATCH",
+                "url": f"/me/messages/{email_id}",
+                "body": updates,
+            }
+        )
+
+    # Execute batch request
+    batch_response = graph.batch_request(requests, account_id)
+
+    # Process results
+    results = []
+    succeeded = 0
+    failed = 0
+
+    for response in batch_response.get("responses", []):
+        request_id = int(response["id"])
+        email_id = email_ids[request_id - 1]
+
+        if response["status"] >= 200 and response["status"] < 300:
+            results.append({"email_id": email_id, "status": "updated", "success": True})
+            succeeded += 1
+        else:
+            error_msg = "Unknown error"
+            if "body" in response and "error" in response["body"]:
+                error_msg = response["body"]["error"].get("message", error_msg)
+
+            results.append(
+                {
+                    "email_id": email_id,
+                    "status": "failed",
+                    "success": False,
+                    "error": error_msg,
+                }
+            )
+            failed += 1
+
+    return {
+        "total": len(email_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "updates": updates,
+        "results": results,
+    }
+
+
+@mcp.tool
 def list_events(
     account_id: str,
     days_ahead: int = 7,

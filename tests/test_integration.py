@@ -716,12 +716,12 @@ async def test_get_file():
         account_info = await get_account_info(session)
         test_content = "Test file content"
         test_filename = f"mcp-test-get-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
-        
+
         # Create a temporary local file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as local_file:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as local_file:
             local_file.write(test_content)
             local_file_path = local_file.name
-        
+
         try:
             create_result = await session.call_tool(
                 "create_file",
@@ -783,13 +783,14 @@ async def test_create_file():
         test_filename = (
             f"mcp-test-create-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
         )
-        
+
         # Create a temporary local file
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as local_file:
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as local_file:
             local_file.write(test_content)
             local_file_path = local_file.name
-        
+
         try:
             result = await session.call_tool(
                 "create_file",
@@ -825,13 +826,14 @@ async def test_update_file():
         test_filename = (
             f"mcp-test-update-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
         )
-        
+
         # Create a temporary local file
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as local_file:
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as local_file:
             local_file.write(test_content)
             local_file_path = local_file.name
-        
+
         try:
             create_result = await session.call_tool(
                 "create_file",
@@ -849,12 +851,12 @@ async def test_update_file():
         file_id = file_data.get("id")
 
         updated_content = f"Updated content at {datetime.now().isoformat()}"
-        
+
         # Create a temporary local file with updated content
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as updated_file:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as updated_file:
             updated_file.write(updated_content)
             updated_file_path = updated_file.name
-        
+
         try:
             result = await session.call_tool(
                 "update_file",
@@ -886,13 +888,14 @@ async def test_delete_file():
         test_filename = (
             f"mcp-test-delete-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
         )
-        
+
         # Create a temporary local file
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as local_file:
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as local_file:
             local_file.write(test_content)
             local_file_path = local_file.name
-        
+
         try:
             create_result = await session.call_tool(
                 "create_file",
@@ -928,14 +931,14 @@ async def test_get_attachment():
         # First create an email with an attachment
         import tempfile
         import os
-        
+
         # Create a temporary directory and file with specific name
         temp_dir = tempfile.mkdtemp()
         temp_file_path = os.path.join(temp_dir, "test_file.txt")
-        
-        with open(temp_file_path, 'w') as f:
+
+        with open(temp_file_path, "w") as f:
             f.write("This is a test attachment content")
-        
+
         try:
             draft_result = await session.call_tool(
                 "create_email_draft",
@@ -971,9 +974,9 @@ async def test_get_attachment():
         attachment = email_detail["attachments"][0]
 
         # Test getting the attachment
-        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as save_file:
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as save_file:
             save_path = save_file.name
-        
+
         try:
             result = await session.call_tool(
                 "get_attachment",
@@ -990,10 +993,10 @@ async def test_get_attachment():
             assert attachment_data["name"] == "test_file.txt"
             assert "saved_to" in attachment_data
             assert attachment_data["saved_to"] == save_path
-            
+
             # Verify file was saved
             assert os.path.exists(save_path)
-            with open(save_path, 'r') as f:
+            with open(save_path, "r") as f:
                 content = f.read()
                 assert content == "This is a test attachment content"
         finally:
@@ -1115,3 +1118,179 @@ async def test_unified_search():
         # Results should be grouped by entity type
         if "message" in search_results:
             assert isinstance(search_results["message"], list)
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_emails():
+    """Test batch_delete_emails tool"""
+    async for session in get_session():
+        account_info = await get_account_info(session)
+
+        # First create some test emails to delete
+        test_emails = []
+        for i in range(3):
+            draft_result = await session.call_tool(
+                "create_email_draft",
+                {
+                    "account_id": account_info["account_id"],
+                    "to": account_info["email"],
+                    "subject": f"MCP Batch Delete Test Email {i}",
+                    "body": f"This is test email {i} for batch deletion",
+                },
+            )
+            assert not draft_result.isError
+            draft_data = parse_result(draft_result)
+            test_emails.append(draft_data["id"])
+
+        # Test batch delete
+        result = await session.call_tool(
+            "batch_delete_emails",
+            {
+                "account_id": account_info["account_id"],
+                "email_ids": test_emails,
+            },
+        )
+        assert not result.isError
+        delete_result = parse_result(result)
+
+        assert delete_result is not None
+        assert delete_result["total"] == 3
+        assert delete_result["succeeded"] == 3
+        assert delete_result["failed"] == 0
+        assert len(delete_result["results"]) == 3
+
+        for result_item in delete_result["results"]:
+            assert result_item["success"]
+            assert result_item["status"] == "deleted"
+            assert result_item["email_id"] in test_emails
+
+
+@pytest.mark.asyncio
+async def test_batch_move_emails():
+    """Test batch_move_emails tool"""
+    async for session in get_session():
+        account_info = await get_account_info(session)
+
+        # First create some test emails to move
+        test_emails = []
+        for i in range(2):
+            draft_result = await session.call_tool(
+                "create_email_draft",
+                {
+                    "account_id": account_info["account_id"],
+                    "to": account_info["email"],
+                    "subject": f"MCP Batch Move Test Email {i}",
+                    "body": f"This is test email {i} for batch moving",
+                },
+            )
+            assert not draft_result.isError
+            draft_data = parse_result(draft_result)
+            test_emails.append(draft_data["id"])
+
+        try:
+            # Test batch move to drafts folder
+            result = await session.call_tool(
+                "batch_move_emails",
+                {
+                    "account_id": account_info["account_id"],
+                    "email_ids": test_emails,
+                    "destination_folder": "drafts",
+                },
+            )
+            assert not result.isError
+            move_result = parse_result(result)
+
+            assert move_result is not None
+            assert move_result["total"] == 2
+            assert move_result["succeeded"] == 2
+            assert move_result["failed"] == 0
+            assert move_result["destination_folder"] == "drafts"
+            assert len(move_result["results"]) == 2
+
+            new_ids = []
+            for result_item in move_result["results"]:
+                assert result_item["success"]
+                assert result_item["status"] == "moved"
+                assert result_item["email_id"] in test_emails
+                if result_item["new_id"]:
+                    new_ids.append(result_item["new_id"])
+
+            # Clean up - delete the moved emails
+            if new_ids:
+                cleanup_result = await session.call_tool(
+                    "batch_delete_emails",
+                    {
+                        "account_id": account_info["account_id"],
+                        "email_ids": new_ids,
+                    },
+                )
+                assert not cleanup_result.isError
+
+        except Exception:
+            # Clean up original emails if move failed
+            await session.call_tool(
+                "batch_delete_emails",
+                {
+                    "account_id": account_info["account_id"],
+                    "email_ids": test_emails,
+                },
+            )
+            raise
+
+
+@pytest.mark.asyncio
+async def test_batch_update_emails():
+    """Test batch_update_emails tool"""
+    async for session in get_session():
+        account_info = await get_account_info(session)
+
+        # First create some test emails to update
+        test_emails = []
+        for i in range(2):
+            draft_result = await session.call_tool(
+                "create_email_draft",
+                {
+                    "account_id": account_info["account_id"],
+                    "to": account_info["email"],
+                    "subject": f"MCP Batch Update Test Email {i}",
+                    "body": f"This is test email {i} for batch updating",
+                },
+            )
+            assert not draft_result.isError
+            draft_data = parse_result(draft_result)
+            test_emails.append(draft_data["id"])
+
+        try:
+            # Test batch update - mark as read
+            result = await session.call_tool(
+                "batch_update_emails",
+                {
+                    "account_id": account_info["account_id"],
+                    "email_ids": test_emails,
+                    "updates": {"isRead": True},
+                },
+            )
+            assert not result.isError
+            update_result = parse_result(result)
+
+            assert update_result is not None
+            assert update_result["total"] == 2
+            assert update_result["succeeded"] == 2
+            assert update_result["failed"] == 0
+            assert update_result["updates"]["isRead"]
+            assert len(update_result["results"]) == 2
+
+            for result_item in update_result["results"]:
+                assert result_item["success"]
+                assert result_item["status"] == "updated"
+                assert result_item["email_id"] in test_emails
+
+        finally:
+            # Clean up - delete the test emails
+            await session.call_tool(
+                "batch_delete_emails",
+                {
+                    "account_id": account_info["account_id"],
+                    "email_ids": test_emails,
+                },
+            )
