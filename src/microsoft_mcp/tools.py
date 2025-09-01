@@ -473,11 +473,11 @@ def reply_all_email(account_id: str, email_id: str, body: str) -> dict[str, str]
 
 @mcp.tool
 def batch_delete_emails(account_id: str, email_ids: list[str]) -> dict[str, Any]:
-    """Delete multiple emails at once using batch operations
+    """Delete multiple emails at once using batch operations (max 20 emails per batch)
 
     Args:
         account_id: Microsoft account ID
-        email_ids: List of email IDs to delete
+        email_ids: List of email IDs to delete (maximum 20)
 
     Returns:
         Dictionary with operation results and statistics
@@ -534,11 +534,11 @@ def batch_delete_emails(account_id: str, email_ids: list[str]) -> dict[str, Any]
 def batch_move_emails(
     account_id: str, email_ids: list[str], destination_folder: str
 ) -> dict[str, Any]:
-    """Move multiple emails to a folder using batch operations
+    """Move multiple emails to a folder using batch operations (max 20 emails per batch)
 
     Args:
         account_id: Microsoft account ID
-        email_ids: List of email IDs to move
+        email_ids: List of email IDs to move (maximum 20)
         destination_folder: Target folder name or path
 
     Returns:
@@ -629,11 +629,11 @@ def batch_move_emails(
 def batch_update_emails(
     account_id: str, email_ids: list[str], updates: dict[str, Any]
 ) -> dict[str, Any]:
-    """Update multiple emails at once using batch operations
+    """Update multiple emails at once using batch operations (max 20 emails per batch)
 
     Args:
         account_id: Microsoft account ID
-        email_ids: List of email IDs to update
+        email_ids: List of email IDs to update (maximum 20)
         updates: Dictionary of properties to update (e.g., {"isRead": True})
 
     Returns:
